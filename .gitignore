@@ -3,3 +3,4 @@
 /Backend/models/__pycache__/
 /Backend/repositories/__pycache__/
 /UI/src/__pycache__/
+/Backend/strategy/*.py

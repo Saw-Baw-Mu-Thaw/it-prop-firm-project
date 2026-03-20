@@ -1,5 +1,5 @@
 import flet as ft
-from Views import LoginView, HomeView
+from Views import LoginView, HomeView, StrategyBuilderView
 
 def main(page: ft.Page):
     
@@ -10,7 +10,9 @@ def main(page: ft.Page):
         
         if page.route == "/home":
             page.views.append(HomeView("/home"))
-                
+        elif page.route == "/strategy_builder":
+            page.views.append(HomeView("/home"))        
+            page.views.append(StrategyBuilderView("/strategy_builder"))
         page.update()
     
     async def view_pop(e):

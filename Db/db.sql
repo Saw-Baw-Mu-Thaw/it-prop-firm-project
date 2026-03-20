@@ -7,6 +7,7 @@ create table users(
 create table broker(
     brokerID int primary key generated always as identity,
     brokerName varchar(255) not null,
+    brokerLogin varchar(255) not null,
     brokerPassword varchar(255) not null,
     userID int not null,
     foreign key (userID) references users(userID)
@@ -17,7 +18,7 @@ create table strategy(
     strategyName varchar(255) not null,
     created timestamp not null default current_timestamp,
     userID int not null,
-    location varchar(255) not null,
+    classname varchar(255) not null,
     foreign key (userID) references users(userID)
 );
 

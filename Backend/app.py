@@ -1,15 +1,16 @@
 import datetime
-
 from fastapi import Depends, FastAPI, HTTPException
 import dotenv
 import os
 from pwdlib import PasswordHash
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from sqlmodel import Field, SQLModel
 from jose import JWTError, jwt
 from datetime import timedelta, datetime
-from repositories import UserRepo
+from repositories import UserRepo, BrokerRepo, StrategyRepo
+from models.InputModels import BackTestInput, BrokerInput, Token, StrategyCreateInput
+import importlib
+import custom_metatrader as mt5
+from custom_backtesting import CustomBacktest
 
 dotenv.load_dotenv()
 
@@ -18,13 +19,7 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = PasswordHash.recommended()
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-class Token(BaseModel):
-    access_token : str
-    token_type : str
-    
 
 app = FastAPI(title="Prop Trading Firm API", version="1.0")
 
@@ -53,3 +48,67 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires) 
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/connect")
+async def connect(input : BrokerInput, token: str = Depends(oauth2_scheme)):
+    if mt5.initialize(login=input.login, password=input.password):
+        username = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+        user = UserRepo.get_user(username)
+        BrokerRepo.add_broker(user_id=user.userid, login=input.login, password=input.password)
+        return {"message" : "Connection to broker successful"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to connect to broker. Check credentials and try again.")
+
+@app.post("/backtest")
+async def backtest(input : BackTestInput, token: str = Depends(oauth2_scheme)):
+    username = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+    user = UserRepo.get_user(username)
+    brokerAcc = BrokerRepo.get_broker(user.userid)
+    
+    if mt5.initialize(login=brokerAcc.brokerLogin, password=brokerAcc.brokerPassword):
+        # perform backtest using input parameters
+        timeframe = mt5.timeframe_value(input.timeframe)
+        from_date = datetime.strptime(input.from_date, "%Y-%m-%d")
+        to_date = datetime.strptime(input.to_date, "%Y-%m-%d")
+        history = mt5.get_rates_frame_range(input.symbol, timeframe, from_date, to_date)
+        
+    strategy_module = importlib.import_module(f"strategy.{input.strategy}")
+    strategy_class = getattr(strategy_module, input.strategy)
+    config = {
+        "testing" : True
+    }
+    
+    runner = CustomBacktest(history, strategy_class, config=config, cash=input.cash, hedging=input.hedging, spread=input.spread,
+                            commission=input.commission, trade_on_close=input.trade_on_close, exclusive_orders=input.exclusive_orders)
+    
+    results = runner.run()
+    return results.to_json()
+        
+
+@app.post("/strategy")
+async def create_strategy(input : StrategyCreateInput, token: str = Depends(oauth2_scheme)):
+    template = f'''
+    from ..custom_backtesting import CustomStrategy 
+    from talib import *
+    
+    class {input.name}(CustomStrategy):
+        def init(self):
+            {input.init}
+            
+        def next(self):
+            {input.next}
+            
+        def calc_indicators(self):
+            {input.calc_indicators}
+    
+    '''
+    
+    username = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+    user = UserRepo.get_user(username)
+    StrategyRepo.create_strategy(strategy_name=input.name, classname=input.name,
+                                 user_id=user.userid)
+    
+    with open(f"strategy/{input.name}.py", "w") as f:
+        f.write(template)
+        
+    return {"message" : "Strategy created successfully"}
