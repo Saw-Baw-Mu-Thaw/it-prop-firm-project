@@ -1,74 +1,9 @@
+import asyncio
+import token
+
 import flet as ft
 from datetime import datetime, timedelta
 import requests
-
-
-class LoginView(ft.View):
-
-    async def login(self, e):
-        # send these values to backend api with requests
-        # print('login function,', self.usernameField.value, ',', self.passwordField.value)
-        username = self.usernameField.value
-        password = self.passwordField.value
-
-        # for testing purposes
-        data = {'username': username, 'password': password}
-        response = requests.post("http://localhost:8000/token", data=data)
-
-        if response.status_code == 200:
-            # print('Access token: ', response.json().get("access_token"))
-            token = response.json().get("access_token")
-            await self.page.shared_preferences.set("token", token)
-            self.page.views.remove(self)
-            await self.page.push_route("/home")
-        else:
-            self.login_failed()
-
-    def login_failed(self):
-        self.errorText.visible = True
-        self.page.update()
-
-    def __init__(self, path):
-        login_margin = ft.Margin(10, 5, 10, 5)
-
-        self.usernameField = ft.TextField(hint_text="John Doe", text_size=18, align=ft.Alignment.CENTER_LEFT,
-                                          expand=True, margin=login_margin)
-        self.passwordField = ft.TextField(password=True, can_reveal_password=True, text_size=18,
-                                          align=ft.Alignment.CENTER_LEFT, expand=True, margin=login_margin)
-
-        self.errorText = ft.Text("Error. Invalid username or password.", color=ft.Colors.RED, visible=False,
-                                 align=ft.Alignment.CENTER, margin=ft.Margin(10, 5, 10, 5), bgcolor=ft.Colors.YELLOW)
-
-        login_column = ft.Column([
-            ft.Text("Prop Firm", size=35, weight=ft.FontWeight.BOLD,
-                    align=ft.Alignment.TOP_CENTER, margin=login_margin),
-            ft.Text("Username", size=16, align=ft.Alignment.CENTER_LEFT, margin=login_margin,
-                    weight=ft.FontWeight.BOLD),
-            self.usernameField,
-            ft.Text("Password", size=16, weight=ft.FontWeight.BOLD, align=ft.Alignment.CENTER_LEFT,
-                    margin=login_margin),
-            self.passwordField,
-            ft.Button("Login", align=ft.Alignment.CENTER, margin=ft.Margin(0, 10, 0, 10),
-                      on_click=self.login),
-            self.errorText
-        ])
-
-        bs = ft.BorderSide(width=5, color=ft.Colors.BLACK,
-                           style=ft.BorderStyle.SOLID)
-        bRadius = ft.BorderRadius(25, 25, 25, 25)
-
-        container_border = ft.Border(top=bs, bottom=bs, left=bs, right=bs)
-        login_container = ft.Container(margin=ft.Margin(50, 30, 50, 10),
-                                       content=login_column,
-                                       border=container_border, border_radius=bRadius)
-
-        super().__init__(
-            route=path,
-            controls=[
-                login_container
-            ]
-        )
-
 
 class HomeView(ft.View):
     def __init__(self, route):
@@ -83,12 +18,9 @@ class HomeView(ft.View):
         toDateText = ft.Text()
         
         # TODO : Get strategies from database and populate dropdown
-        strategyPicker = ft.DropdownM2(
+        self.strategyPicker = ft.DropdownM2(
                                 width=220,
-                                options=[
-                                    ft.DropdownOption(
-                                        "Strategy 1", "Strategy 1")
-                                ]  # fetch strategies from database
+                                options=[]
                             )
         
         curPairPicker = ft.DropdownM2(
@@ -137,7 +69,7 @@ class HomeView(ft.View):
         
         async def send_backtest_params(e):
             params = {
-                "strategy" : strategyPicker.value,
+                "strategy" : self.strategyPicker.value,
                 "symbol" : curPairPicker.value,
                 "timeframe" : timeframePicker.value,
                 "from_date" : fromDateText.value,
@@ -163,7 +95,7 @@ class HomeView(ft.View):
                         weight=ft.FontWeight.BOLD, align=ft.Alignment.CENTER_LEFT),
                         ft.Row(controls=[
                             ft.Text("Strategy: "),
-                            strategyPicker
+                            self.strategyPicker
                         ], margin=controlMargin),
                         ft.Row(controls=[
                             ft.Text("Currency Pair: "),
@@ -230,6 +162,10 @@ class HomeView(ft.View):
                 ])
             ])
         )
+             
+        self.datatable = ft.DataTable(columns=[ft.DataColumn(ft.Text("Name"), expand=True),
+                                          ft.DataColumn(ft.Text("Actions"), expand=True)],
+                                 rows=[], align=ft.Alignment.TOP_CENTER, expand=True)
 
         strategy_container = ft.Container(
             content=ft.Column(
@@ -241,20 +177,7 @@ class HomeView(ft.View):
                         ft.Button(content="New Strategy", icon=ft.Icons.BUILD, on_click=open_strategy_builder)
                     ]),
                     ft.Divider(color=ft.Colors.BLACK, thickness=3),
-                    ft.DataTable(
-                        columns=[
-                            ft.DataColumn(ft.Text("Name"), expand=True),
-                            ft.DataColumn(ft.Text("Actions"), expand=True)
-                        ],
-                        rows=[
-                            ft.DataRow(cells=[
-                                ft.DataCell(ft.Text("Demo Strategy")),
-                                ft.DataCell(ft.Button("Delete"))
-                            ]),
-                        ],
-                        align=ft.Alignment.TOP_CENTER,
-                        expand=True
-                    )
+                    self.datatable
                 ]
             )
         )
@@ -324,84 +247,38 @@ class HomeView(ft.View):
             can_pop=False
         )
         
-    
-
-
-class StrategyBuilderView(ft.View):
-    
-    stratNameField = ft.TextField(hint_text="Strategy Name", width=300)
-    initTextField = ft.TextField(expand=True, multiline=True, min_lines=10, max_lines=20)
-    nextTextField = ft.TextField(expand=True, multiline=True, min_lines=10, max_lines=20)
-    calcIndicatorsTextField = ft.TextField(expand=True, multiline=True, min_lines=10, max_lines=20)
-    
-    async def save_strategy(e):
-        strategy_code = {
-            "name" : StrategyBuilderView.stratNameField.value,
-            "init" : StrategyBuilderView.initTextField.value,
-            "next" : StrategyBuilderView.nextTextField.value,
-            "calc_indicators" : StrategyBuilderView.calcIndicatorsTextField.value
-        }
-        token = await e.page.shared_preferences.get("token")
-        headers = {'Content-Type' : 'application/json',
-                   'Authorization' : f'Bearer {token}'}
-        response = requests.post("http://localhost:8000/strategy", json=strategy_code,
-                                 headers=headers)
+    def did_mount(self):
+        self.page.run_task(self.load_strategies)
+        self.page.run_task(self.set_strategies)
         
+    async def load_strategies(self):
+        strategies = await self.fetch_strategies()
+        self.datatable.rows = []
+        for strat in strategies:
+            self.datatable.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(strat["strategyName"])),
+                    ft.DataCell(ft.Row(controls=[
+                        ft.IconButton(ft.Icons.EDIT, on_click=lambda e, s=strat: print(f"Edit {s['strategyName']}")),
+                        ft.IconButton(ft.Icons.DELETE, on_click=lambda e, s=strat: print(f"Delete {s['strategyName']}"))
+                    ]))
+                ])
+            )
+        self.page.update()
+        
+    async def set_strategies(self):
+        strategies = await self.fetch_strategies()
+        
+        for strat in strategies:
+            self.strategyPicker.options.append(ft.DropdownOption(strat["strategyName"], strat["strategyName"]))
+        self.page.update()
+    
+    async def fetch_strategies(self):
+        token = await self.page.shared_preferences.get("token")
+        response = await asyncio.to_thread(requests.get,"http://localhost:8000/strategy", headers={"Authorization" : f"Bearer {token}"})
+
         if response.status_code == 200:
-            print("Strategy saved successfully")
-            await e.page.push_route('/home')
+            strategies = response.json()
         else:
-            print("Error saving strategy")
-        
-    
-    builder = ft.Container(
-        content=ft.Column(
-            expand=True,
-            controls=[
-                ft.Text("Strategy Builder)", size=36, weight=ft.FontWeight.BOLD, align=ft.Alignment.CENTER_LEFT),
-                stratNameField,
-                ft.Button("Save Strategy", icon=ft.Icons.SAVE, align=ft.Alignment.CENTER_LEFT, on_click=save_strategy),
-                ft.Text("Init", tooltip="Code to run when strategy is initialized", size=30, weight=ft.FontWeight.BOLD,
-                        align=ft.Alignment.CENTER_LEFT),
-                initTextField,
-                ft.Text("Next", tooltip="Code to run on every tick/candle", size=30, weight=ft.FontWeight.BOLD,
-                        align=ft.Alignment.CENTER_LEFT),
-                nextTextField,
-                ft.Text("Calculate Indicators", tooltip="Code to calculate indicators. Runs on every tick/candle before Next",
-                        size=30, weight=ft.FontWeight.BOLD, align=ft.Alignment.CENTER_LEFT),
-                calcIndicatorsTextField
-            ]
-        ),
-        expand=True
-    )
-    
-    
-    
-    def __init__(self, route):
-        super().__init__(
-            route=route,
-            appbar=ft.AppBar(title=ft.Text("Strategy Builder")),
-            controls=[self.builder],
-            can_pop=False,
-            on_confirm_pop=self.ask_pop_permission
-        )
-        
-    async def ask_pop_permission(self,e):
-        async def on_dlg_yes(e):
-            self.page.pop_dialog()
-            await self.confirm_pop(True)
-            
-        async def on_dlg_no(e):
-            self.page.pop_dialog()
-            await self.confirm_pop(False)
-            
-        dlg_modal = ft.AlertDialog(
-            title=ft.Text("Unsaved Changes"),
-            content=ft.Text("You have unsaved changes. Are you sure you want to leave?"),
-            actions=[
-                ft.TextButton("Yes", on_click=on_dlg_yes),
-                ft.TextButton("No", on_click=on_dlg_no)
-            ],
-            actions_alignment=ft.MainAxisAlignment.END
-        )
-        self.page.show_dialog(dlg_modal)
+            strategies = []
+        return strategies    

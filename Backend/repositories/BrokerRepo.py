@@ -1,7 +1,12 @@
 from sqlmodel import Session, select, create_engine
 from models.Broker import BrokerAcc
+import dotenv
+import os
 
-engine = create_engine("postgresql://postgres:postgresPass@localhost:5432/PropFirmDb")
+dotenv.load_dotenv()
+conn_string = os.getenv("DB_CONN", "postgresql://postgres:postgresPass@localhost:5432/PropFirmDb")
+
+engine = create_engine(conn_string)
 
 def get_session():
     with Session(engine) as session:

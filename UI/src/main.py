@@ -1,5 +1,7 @@
 import flet as ft
-from Views import LoginView, HomeView, StrategyBuilderView
+from views.LoginView import LoginView
+from views.HomeView import HomeView
+from views.StrategyBuilderView import StrategyBuilderView
 
 def main(page: ft.Page):
     
