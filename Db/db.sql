@@ -1,25 +1,25 @@
 create table users(
-    userID int primary key generated always as identity,
-    username varchar(255) not null,
-    password varchar(255) not null
+    "userId" int primary key generated always as identity,
+    "username" varchar(255) not null,
+    "password" varchar(255) not null
 );
 
 create table broker(
-    brokerID int primary key generated always as identity,
-    brokerName varchar(255) not null,
-    brokerLogin varchar(255) not null,
-    brokerPassword varchar(255) not null,
-    userID int not null,
-    foreign key (userID) references users(userID)
+    "brokerId" int primary key generated always as identity,
+    "brokerName" varchar(255) not null,
+    "brokerLogin" varchar(255) not null,
+    "brokerPassword" varchar(255) not null,
+    "userId" int not null,
+    foreign key ("userId") references users("userId")
 );
 
 create table strategy(
-    strategyID int primary key generated always as identity,
-    strategyName varchar(255) not null,
-    created timestamp not null default current_timestamp,
-    userID int not null,
-    classname varchar(255) not null,
-    foreign key (userID) references users(userID)
+    "strategyId" int primary key generated always as identity,
+    "strategyName" varchar(255) not null,
+    "created" timestamp not null default current_timestamp,
+    "userId" int not null,
+    "classname" varchar(255) not null,
+    foreign key ("userId") references users("userId")
 );
 
 -- password is adminPass123

@@ -11,6 +11,7 @@ from models.InputModels import BackTestInput, BrokerInput, Token, StrategyCreate
 import importlib
 import custom_metatrader as mt5
 from custom_backtesting import CustomBacktest
+import textwrap
 
 dotenv.load_dotenv()
 
@@ -84,31 +85,47 @@ async def backtest(input : BackTestInput, token: str = Depends(oauth2_scheme)):
     results = runner.run()
     return results.to_json()
         
+template = '''
+from ..custom_backtesting import CustomStrategy 
+from talib import *
+
+class {}(CustomStrategy):
+    def init(self):
+        {}
+        
+    def next(self):
+        {}
+        
+    def calc_indicators(self):
+        {}
+'''
+
+def indent_code(code):
+    lines = code.split('\n')
+    for i in range(1, len(lines)):
+        lines[i] = '    ' + '    ' + lines[i]
+    return '\n'.join(lines)
 
 @app.post("/strategy")
 async def create_strategy(input : StrategyCreateInput, token: str = Depends(oauth2_scheme)):
-    template = f'''
-    from ..custom_backtesting import CustomStrategy 
-    from talib import *
-    
-    class {input.name}(CustomStrategy):
-        def init(self):
-            {input.init}
-            
-        def next(self):
-            {input.next}
-            
-        def calc_indicators(self):
-            {input.calc_indicators}
-    
-    '''
-    
+
     username = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
     user = UserRepo.get_user(username)
     StrategyRepo.create_strategy(strategy_name=input.name, classname=input.name,
-                                 user_id=user.userid)
+                                 user_id=user.userId)
     
     with open(f"strategy/{input.name}.py", "w") as f:
-        f.write(template)
+        init_code = indent_code(input.init)
+        next_code = indent_code(input.next)
+        calc_indicators_code = indent_code(input.calc_indicators)
+        text = template.format(input.name, init_code, next_code, calc_indicators_code)
+        f.write(text)
         
     return {"message" : "Strategy created successfully"}
+
+@app.get("/strategy")
+async def get_strategies(token: str = Depends(oauth2_scheme)):
+    username = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+    user = UserRepo.get_user(username)
+    strategies = StrategyRepo.get_strategies_by_user_id(user.userId)
+    return strategies
